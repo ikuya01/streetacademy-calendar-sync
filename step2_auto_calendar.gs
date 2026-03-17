@@ -60,9 +60,13 @@ function processStreetAcademyEmails() {
   var skipped = 0;
   var errors = 0;
 
+  // 直近1日分のメールだけ検索（トリガー5分おき想定、余裕を持って1日）
+  var sinceDate = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  var sinceStr = ' after:' + Utilities.formatDate(sinceDate, 'Asia/Tokyo', 'yyyy/MM/dd');
+
   // 各検索クエリでメールを取得
   for (var q = 0; q < CONFIG.SEARCH_QUERIES.length; q++) {
-    var query = CONFIG.SEARCH_QUERIES[q] + labelFilter;
+    var query = CONFIG.SEARCH_QUERIES[q] + labelFilter + sinceStr;
     var threads = GmailApp.search(query, 0, 50);
 
     if (threads.length === 0) continue;
@@ -77,15 +81,6 @@ function processStreetAcademyEmails() {
         var result = parseReservationEmail(msg);
 
         if (result) {
-          // 過去の日程はスキップ
-          if (result.startDate < new Date()) {
-            Logger.log('- スキップ（過去）: ' + result.title + ' (' +
-              Utilities.formatDate(result.startDate, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm') + ')');
-            threads[i].addLabel(label);
-            skipped++;
-            continue;
-          }
-
           if (!isDuplicate(calendar, result)) {
             var event = calendar.createEvent(
               result.title,
