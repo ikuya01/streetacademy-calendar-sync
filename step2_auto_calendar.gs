@@ -77,6 +77,15 @@ function processStreetAcademyEmails() {
         var result = parseReservationEmail(msg);
 
         if (result) {
+          // 過去の日程はスキップ
+          if (result.startDate < new Date()) {
+            Logger.log('- スキップ（過去）: ' + result.title + ' (' +
+              Utilities.formatDate(result.startDate, 'Asia/Tokyo', 'yyyy/MM/dd HH:mm') + ')');
+            threads[i].addLabel(label);
+            skipped++;
+            continue;
+          }
+
           if (!isDuplicate(calendar, result)) {
             var event = calendar.createEvent(
               result.title,
