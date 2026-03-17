@@ -198,8 +198,9 @@ function parseReservationEmail(message) {
   }
 
   // 年なしパターンの処理
-  var now = new Date();
-  var year = now.getFullYear();
+  // メールの受信日から年を推定する（現在時刻ではなくメール受信時点で判定）
+  var emailDate = message.getDate();
+  var emailYear = emailDate.getFullYear();
   var month = parseInt(dateTimeMatch[1]) - 1; // 0-indexed
   var day = parseInt(dateTimeMatch[2]);
   var startHour = parseInt(dateTimeMatch[3]);
@@ -207,14 +208,16 @@ function parseReservationEmail(message) {
   var endHour = parseInt(dateTimeMatch[5]);
   var endMin = parseInt(dateTimeMatch[6]);
 
-  var startDate = new Date(year, month, day, startHour, startMin);
-  var endDate = new Date(year, month, day, endHour, endMin);
+  // まずメール受信年で日付を作る
+  var startDate = new Date(emailYear, month, day, startHour, startMin);
+  var endDate = new Date(emailYear, month, day, endHour, endMin);
 
-  // 過去の日付なら来年と判定（例: 12月に届いた1月の講座）
-  var oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-  if (startDate < oneWeekAgo) {
-    startDate.setFullYear(year + 1);
-    endDate.setFullYear(year + 1);
+  // メール受信日より2ヶ月以上前の日付なら翌年と判定
+  // （例: 12月に届いた1月の講座 → 翌年1月）
+  var twoMonthsBefore = new Date(emailDate.getTime() - 60 * 24 * 60 * 60 * 1000);
+  if (startDate < twoMonthsBefore) {
+    startDate.setFullYear(emailYear + 1);
+    endDate.setFullYear(emailYear + 1);
   }
 
   // 終了が開始より前なら翌日（深夜またぎ）
@@ -262,6 +265,39 @@ function getOrCreateLabel(labelName) {
     label = GmailApp.createLabel(labelName);
   }
   return label;
+}
+
+
+// ========== リセット用 ==========
+
+/**
+ * 誤登録されたカレンダーイベントを一括削除し、処理済みラベルを外す
+ * ※ 初回設定ミスの修正用。通常は使わない
+ */
+function resetAll() {
+  // 1. 【ストアカ】で始まるカレンダーイベントを全削除
+  var calendar = CalendarApp.getCalendarById(CONFIG.CALENDAR_ID);
+  var startRange = new Date(2026, 0, 1); // 2026年1月1日
+  var endRange = new Date(2028, 0, 1);   // 2028年1月1日
+  var events = calendar.getEvents(startRange, endRange, {search: '【ストアカ】'});
+
+  Logger.log(events.length + '件の【ストアカ】イベントを削除します...');
+  for (var i = 0; i < events.length; i++) {
+    Logger.log('  削除: ' + events[i].getTitle() + ' (' + events[i].getStartTime() + ')');
+    events[i].deleteEvent();
+  }
+
+  // 2. 処理済みラベルを外す
+  var label = GmailApp.getUserLabelByName(CONFIG.PROCESSED_LABEL);
+  if (label) {
+    var threads = label.getThreads();
+    Logger.log(threads.length + '件のメールからラベルを外します...');
+    for (var i = 0; i < threads.length; i++) {
+      threads[i].removeLabel(label);
+    }
+  }
+
+  Logger.log('リセット完了。processStreetAcademyEmails を再実行してください。');
 }
 
 
